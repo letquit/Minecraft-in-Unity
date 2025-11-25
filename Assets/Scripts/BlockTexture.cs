@@ -1,14 +1,13 @@
 using UnityEngine;
 
-[ExecuteInEditMode]
 public class BlockTexture : MonoBehaviour
 {
-    MeshFilter meshFilter;
-    Mesh mesh;
+    private MeshFilter meshFilter;
+    private Mesh mesh;
     
-    void Start() {
+    private void Start() {
         meshFilter = GetComponent<MeshFilter>();
-        mesh = meshFilter.sharedMesh;
+        mesh = meshFilter.mesh;
         Vector2[] uv = mesh.uv;
 
         // -------------------------------------------------------
