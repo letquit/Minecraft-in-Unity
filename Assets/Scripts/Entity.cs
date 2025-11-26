@@ -7,6 +7,7 @@ public class Entity : MonoBehaviour
 {
     public float speed;
     public float jump;
+    public float range;
 
     protected new Rigidbody rigidbody;
 
