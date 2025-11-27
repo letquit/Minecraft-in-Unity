@@ -182,24 +182,24 @@ public class Inventory : MonoBehaviour
         float minDistance = float.MaxValue;
         InventorySlot nearestSlot = null;
         
+        Camera eventCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        
         foreach (InventorySlot slot in slots)
         {
             if (slot == null) continue;
             
-            // 获取槽位的屏幕位置
             RectTransform slotRect = slot.GetComponent<RectTransform>();
             if (slotRect == null) continue;
             
             // 检查鼠标是否在槽位的矩形范围内
-            if (RectTransformUtility.RectangleContainsScreenPoint(slotRect, Input.mousePosition, canvas.worldCamera))
+            if (RectTransformUtility.RectangleContainsScreenPoint(slotRect, Input.mousePosition, eventCamera))
             {
-                // 鼠标在槽位内，直接返回该槽位
                 return slot;
             }
             
             // 计算鼠标到槽位中心的距离
-            Vector2 slotScreenPos = RectTransformUtility.WorldToScreenPoint(canvas.worldCamera, slot.transform.position);
-            float distance = Vector2.Distance(Input.mousePosition, slotScreenPos);
+            Vector2 slotScreenPos = RectTransformUtility.WorldToScreenPoint(eventCamera, slot.transform.position);
+            float distance = Vector2.Distance(Input. mousePosition, slotScreenPos);
             
             if (distance < minDistance && distance <= highlightDistanceThreshold)
             {
@@ -333,32 +333,31 @@ public class Inventory : MonoBehaviour
     {
         if (draggedItem == null || canvas == null || windowRect == null) return;
         
-        // 获取鼠标在Canvas中的本地坐标
-        Vector2 mouseLocalPosition;
+        // 获取鼠标在屏幕上的位置并转换到Canvas空间
+        Vector2 mousePosition;
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            (RectTransform)canvas.transform, 
+            windowRect, 
             Input.mousePosition, 
-            canvas.worldCamera, 
-            out mouseLocalPosition);
+            canvas.renderMode == RenderMode. ScreenSpaceOverlay ?  null : canvas.worldCamera, 
+            out mousePosition);
         
-        // 获取窗口在Canvas中的本地坐标和尺寸
-        Vector2 windowLocalPosition = windowRect.localPosition;
+        // 获取窗口尺寸
         Vector2 windowSize = windowRect.rect.size;
         Vector2 windowPivot = windowRect.pivot;
         
-        // 计算窗口边界（考虑pivot偏移）
-        float windowLeft = windowLocalPosition.x - windowSize.x * windowPivot.x;
-        float windowRight = windowLocalPosition.x + windowSize.x * (1 - windowPivot.x);
-        float windowBottom = windowLocalPosition.y - windowSize.y * windowPivot.y;
-        float windowTop = windowLocalPosition.y + windowSize.y * (1 - windowPivot.y);
+        // 计算窗口边界（相对于windowRect的本地坐标）
+        float windowLeft = -windowSize.x * windowPivot.x;
+        float windowRight = windowSize.x * (1 - windowPivot.x);
+        float windowBottom = -windowSize. y * windowPivot.y;
+        float windowTop = windowSize.y * (1 - windowPivot.y);
         
-        // 检查鼠标是否在窗口内（用于限制物品位置）
-        isMouseInsideWindow = mouseLocalPosition.x >= windowLeft && 
-                              mouseLocalPosition.x <= windowRight &&
-                              mouseLocalPosition.y >= windowBottom && 
-                              mouseLocalPosition.y <= windowTop;
+        // 检查鼠标是否在窗口内
+        isMouseInsideWindow = mousePosition.x >= windowLeft && 
+                              mousePosition.x <= windowRight &&
+                              mousePosition.y >= windowBottom && 
+                              mousePosition.y <= windowTop;
         
-        // 检查鼠标是否在任意可交互区域内（用于限制操作）
+        // 检查鼠标是否在任意可交互区域内
         isMouseInsideInteractiveArea = CheckMouseInsideInteractiveAreas();
         
         // 计算物品的目标位置
@@ -366,20 +365,18 @@ public class Inventory : MonoBehaviour
         
         if (isMouseInsideWindow)
         {
-            // 鼠标在窗口内，物品直接跟随鼠标
-            targetLocalPosition = mouseLocalPosition;
+            targetLocalPosition = mousePosition;
         }
         else
         {
-            // 鼠标在窗口外，将物品位置限制在窗口边缘
             targetLocalPosition = new Vector2(
-                Mathf.Clamp(mouseLocalPosition.x, windowLeft, windowRight),
-                Mathf.Clamp(mouseLocalPosition.y, windowBottom, windowTop)
+                Mathf.Clamp(mousePosition. x, windowLeft, windowRight),
+                Mathf.Clamp(mousePosition.y, windowBottom, windowTop)
             );
         }
         
-        // 应用位置
-        draggedItem.transform.position = canvas.transform.TransformPoint(targetLocalPosition);
+        // 将本地坐标转换为世界坐标并应用到物品
+        draggedItem.transform. position = windowRect.TransformPoint(targetLocalPosition);
     }
     
     /// <summary>

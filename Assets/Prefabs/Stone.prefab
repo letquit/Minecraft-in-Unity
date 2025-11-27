@@ -18,7 +18,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &978999718891480941
 Transform:
@@ -121,5 +121,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8310a25a4ee438942aec976076fba23b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  durabilitySeconds: 1
+  durabilitySeconds: 1.15
   breakingParticlesPrefab: {fileID: 4767093748573092825, guid: 2db57e3c208d7874483b3ba64f0351c3, type: 3}

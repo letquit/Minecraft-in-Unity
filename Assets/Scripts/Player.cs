@@ -11,7 +11,7 @@ public class Player : Entity
 
     private float xRotation;
     private float yRotation;
-    private bool grounded;
+    public bool grounded;
     private float breakSeconds;
     
     private Block targetBlock;
@@ -359,7 +359,7 @@ public class Player : Entity
     void TryPlaceBlock() 
     {
         // 若没有有效目标方块则不执行放置逻辑
-        if (!targetBlock)
+        if (! targetBlock)
             return;
     
         // 获取碰撞点的法线
@@ -367,9 +367,9 @@ public class Player : Entity
     
         // 将法线取整，消除浮点数误差
         Vector3 placeDirection = new Vector3(
-            Mathf.Round(hitNormal.x),
+            Mathf.Round(hitNormal. x),
             Mathf.Round(hitNormal.y),
-            Mathf.Round(hitNormal.z)
+            Mathf. Round(hitNormal.z)
         );
         // 计算新方块的目标位置
         Vector3 newBlockPosition = targetBlock.transform.position + placeDirection;
@@ -378,13 +378,43 @@ public class Player : Entity
         {
             return;
         }
-        // 玩家防卡死检测，检查新位置是否有玩家（或任何其他物理实体）
-        if (Physics.CheckBox(newBlockPosition, Vector3.one * 0.45f, Quaternion.identity, LayerMask.GetMask("Default", "Player")))
+        
+        // 获取玩家碰撞体信息
+        CapsuleCollider playerCapsule = GetComponent<CapsuleCollider>();
+        float playerFootY = transform.position.y + playerCapsule. center.y - playerCapsule. height / 2f;
+        
+        // 判断方块是否放置在玩家脚底以下（脚下放置允许）
+        // 方块顶部 Y = newBlockPosition.y + 0.5（假设方块大小为1）
+        float blockTopY = newBlockPosition.y + 0.5f;
+        bool isPlacingBelowFeet = blockTopY <= playerFootY + 0.1f; // 加一点容差
+        
+        // 玩家防卡死检测
+        Collider[] colliders = Physics. OverlapBox(newBlockPosition, Vector3.one * 0.45f, Quaternion.identity);
+        
+        foreach (Collider col in colliders)
         {
-            return;
+            // 如果碰撞体是玩家自身
+            if (col.gameObject == this.gameObject)
+            {
+                // 如果是脚下放置，允许（玩家会站在方块上）
+                if (isPlacingBelowFeet)
+                {
+                    continue;
+                }
+                // 如果不是脚下放置（方块会与玩家身体重叠），阻止放置
+                else
+                {
+                    return;
+                }
+            }
+            else
+            {
+                // 如果碰撞体不是玩家，阻止放置
+                return;
+            }
         }
         
-        GameObject block = Instantiate(activeBlock.gameObject);
+        GameObject block = Instantiate(activeBlock. gameObject);
         block.transform.position = newBlockPosition;
     }
     
