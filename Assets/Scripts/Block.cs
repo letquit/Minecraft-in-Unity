@@ -15,9 +15,11 @@ public class Block : MonoBehaviour
     /// <summary>
     /// 每帧更新函数，用于处理破坏粒子效果的销毁逻辑
     /// </summary>
-    private void Update() {
+    private void Update() 
+    {
         // 如果存在破坏粒子效果，检查是否需要销毁
-        if (breakingParticles) {
+        if (breakingParticles)
+        {
             // 如果距离上次破坏进度已经超过0.1秒，则销毁粒子效果
             if (Time.time > lastBreakProgress + .1f)
             {
@@ -31,15 +33,18 @@ public class Block : MonoBehaviour
     /// </summary>
     /// <param name="breakSeconds">破坏所用的时间（秒）</param>
     /// <returns>如果破坏成功则返回true，否则返回false</returns>
-    public bool TryBreak(float breakSeconds) {
+    public bool TryBreak(float breakSeconds)
+    {
         lastBreakProgress = Time.time;
         // 如果当前没有破坏粒子效果且预制体存在，则创建粒子效果
-        if (!breakingParticles && breakingParticlesPrefab) {
+        if (!breakingParticles && breakingParticlesPrefab) 
+        {
             breakingParticles = Instantiate(breakingParticlesPrefab);
             breakingParticles.transform.position = transform.position;
         }
         // 如果破坏时间超过耐久度，则完全破坏方块
-        if (breakSeconds > durabilitySeconds) {
+        if (breakSeconds > durabilitySeconds)
+        {
             Break();
             return true;
         }
@@ -61,7 +66,8 @@ public class Block : MonoBehaviour
     /// <summary>
     /// 完全破坏方块，销毁粒子效果和游戏对象
     /// </summary>
-    public void Break() {
+    public void Break() 
+    {
         CancelBreak();
         // 销毁当前游戏对象
         Destroy(gameObject);

@@ -88,7 +88,8 @@ public class Player : Entity
         Vector3 center = transform.position + capsuleCollider.center;
         
         // 检测前后左右四个方向
-        Vector3[] directions = {
+        Vector3[] directions =
+        {
             transform.forward,
             -transform.forward,
             transform.right,
@@ -159,6 +160,12 @@ public class Player : Entity
     /// </summary>
     private void Update()
     {
+        // 物品栏打开时禁用游戏操作
+        if (CheckInventory())
+        {
+            return; // 跳过所有游戏逻辑
+        }
+        
         CheckRotation();
         CheckMovement();
         CheckJump();
@@ -167,6 +174,25 @@ public class Player : Entity
         CheckTargetBlock();
         
         CheckBreakAndPlace();
+    }
+    
+    /// <summary>
+    /// 检查物品栏状态并在打开时禁用相关游戏操作
+    /// </summary>
+    private bool CheckInventory()
+    {
+        if (Inventory.open)
+        {
+            // 停止破坏方块
+            if (breakingBlock != null)
+            {
+                breakingBlock.CancelBreak();
+                breakingBlock = null;
+            }
+            breakSeconds = 0;
+            return true;
+        }
+        return false;
     }
     
     /// <summary>
@@ -200,7 +226,8 @@ public class Player : Entity
     /// <summary>
     /// 控制玩家水平方向上的移动速度，基于键盘输入进行位移计算。
     /// </summary>
-    private void CheckMovement() {
+    private void CheckMovement() 
+    {
         rigidbody.linearVelocity = new Vector3(Input.GetAxis("Horizontal") * speed,
             rigidbody.linearVelocity.y, Input.GetAxis("Vertical") * speed);
 
@@ -210,10 +237,15 @@ public class Player : Entity
     /// <summary>
     /// 判断是否满足跳跃条件并在按下跳跃键时执行跳跃动作。
     /// </summary>
-    private void CheckJump() {
-        if (!grounded) { return; }
+    private void CheckJump() 
+    {
+        if (!grounded)
+        {
+            return;
+        }
 
-        if (Input.GetButtonDown("Jump")) {
+        if (Input.GetButtonDown("Jump"))
+        {
             Jump();
         }
     }
@@ -221,7 +253,8 @@ public class Player : Entity
     /// <summary>
     /// 检查玩家的破坏和放置方块输入操作
     /// </summary>
-    private void CheckBreakAndPlace() {
+    private void CheckBreakAndPlace() 
+    {
         // 检测左键持续按下状态，用于破坏方块
         if (Input.GetButton("Fire1"))
         {
@@ -249,7 +282,8 @@ public class Player : Entity
     /// <summary>
     /// 使用射线投射检测准心所指的目标方块对象。
     /// </summary>
-    private void CheckTargetBlock() {
+    private void CheckTargetBlock() 
+    {
         //每一帧必须先清空目标 清除上一帧的方块引用
         targetBlock = null;
 
@@ -257,7 +291,8 @@ public class Player : Entity
         Ray ray = cameraSettings.camera.ScreenPointToRay(Input.mousePosition);
         
         // 如果射线没打中任何东西，逻辑正确结束
-        if (Physics.Raycast(ray, out hit)) {
+        if (Physics.Raycast(ray, out hit)) 
+        {
             // 获取命中的物体
             Transform objectHit = hit.transform;
             Block blockComponent = objectHit.GetComponent<Block>();
@@ -278,7 +313,8 @@ public class Player : Entity
     /// <summary>
     /// 尝试持续破坏目标方块，根据按住时间累积进度直到完成破坏。
     /// </summary>
-    private void TryBreakBlock() {
+    private void TryBreakBlock() 
+    {
         // 若无目标方块，则重置破坏时间和引用
         if (!targetBlock)
         {
@@ -320,7 +356,8 @@ public class Player : Entity
     /// <summary>
     /// 在目标方块相邻位置尝试放置一个新的方块实例。
     /// </summary>
-    void TryPlaceBlock() {
+    void TryPlaceBlock() 
+    {
         // 若没有有效目标方块则不执行放置逻辑
         if (!targetBlock)
             return;
@@ -401,7 +438,8 @@ public class Player : Entity
     /// 包含摄像机组件引用及其横向和纵向灵敏度参数。
     /// </summary>
     [System.Serializable]
-    public struct CameraSettings {
+    public struct CameraSettings 
+    {
         public Camera camera;               // 当前使用的摄像机组件
         public float sensitivityX;          // 横向旋转灵敏度
         public float sensitivityY;          // 纵向旋转灵敏度

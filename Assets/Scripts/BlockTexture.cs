@@ -5,7 +5,8 @@ public class BlockTexture : MonoBehaviour
     private MeshFilter meshFilter;
     private Mesh mesh;
     
-    private void Start() {
+    private void Start() 
+    {
         meshFilter = GetComponent<MeshFilter>();
         mesh = meshFilter.mesh;
         Vector2[] uv = mesh.uv;
