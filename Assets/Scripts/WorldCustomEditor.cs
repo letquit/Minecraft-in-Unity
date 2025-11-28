@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEditor;
+
 #if UNITY_EDITOR
 
 /// <summary>
@@ -11,18 +12,17 @@ public class WorldCustomEditor : Editor
     /// <summary>
     /// 重写Inspector GUI绘制方法，用于自定义World组件在Inspector面板中的显示内容
     /// </summary>
-    public override void OnInspectorGUI() 
+    public override void OnInspectorGUI()
     {
         // 绘制默认的Inspector界面
         DrawDefaultInspector();
-        
+
         // 添加一个生成按钮，点击后调用World实例的Generate方法
-        if (GUILayout.Button("Generate (Long Lag)")) 
+        if (GUILayout.Button("Generate (Long Lag)"))
         {
             if (World.instance)
             {
                 World.instance.Generate();
-                
             }
             else
             {

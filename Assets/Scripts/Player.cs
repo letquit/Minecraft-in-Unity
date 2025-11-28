@@ -9,34 +9,46 @@ public class Player : Entity
     public CameraSettings cameraSettings;
     public Block activeBlock;
 
+    /// <summary>
+    /// 玩家的库存系统引用
+    /// </summary>
+    public Inventory inventory;
+
     private float xRotation;
     private float yRotation;
     public bool grounded;
     private float breakSeconds;
-    
+
     private Block targetBlock;
     private Block breakingBlock;
     private RaycastHit targetRaycastHit;
-    
-    [Header("Ground Detection")]
-    // public float groundCheckDistance = 0.1f;
-    public float groundCheckRadius = 0.3f;
+
+    [Header("Ground Detection")] public float groundCheckRadius = 0.3f;
     public LayerMask groundLayer;
-    
-    [Header("Gravity Settings")]
-    public float gravityMultiplier = 2.5f;
-    
-    [Header("Edge Stand Settings")]
-    [Tooltip("用于站立的物理材质（高摩擦力）")]
+
+    [Header("Gravity Settings")] public float gravityMultiplier = 2.5f;
+
+    [Header("Edge Stand Settings")] [Tooltip("用于站立的物理材质（高摩擦力）")]
     public PhysicsMaterial standingMaterial;
-    [Tooltip("用于移动的物理材质（低摩擦力）")]
-    public PhysicsMaterial movingMaterial;
-    [Tooltip("判定为移动的最小输入阈值")]
-    public float moveInputThreshold = 0.1f;
-    
+
+    [Tooltip("用于移动的物理材质（低摩擦力）")] public PhysicsMaterial movingMaterial;
+    [Tooltip("判定为移动的最小输入阈值")] public float moveInputThreshold = 0.1f;
+
+    [Header("Jump Settings")] [Tooltip("跳跃冷却时间")]
+    public float jumpCooldown = 0.2f;
+
+    [Tooltip("允许跳跃的最大垂直速度")] public float maxVerticalSpeedToJump = 2f;
+
+    private float lastJumpTime = -1f;
+
     private CapsuleCollider capsuleCollider;
     private bool isMoving;
     private bool isTouchingWall;
+
+    [Header("Block Container")] [Tooltip("存放放置方块的容器名称")]
+    public string blockContainerName = "Blocks";
+
+    private Transform blockContainer;
 
     /// <summary>
     /// 初始化玩家设置：锁定并隐藏光标，获取组件引用，并初始化物理材质。
@@ -45,9 +57,12 @@ public class Player : Entity
     {
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-        
+
         capsuleCollider = GetComponent<CapsuleCollider>();
-        
+
+        // 查找或创建方块容器
+        InitBlockContainer();
+
         // 如果没有指定材质，自动创建
         if (standingMaterial == null)
         {
@@ -56,7 +71,7 @@ public class Player : Entity
             standingMaterial.dynamicFriction = 1f;
             standingMaterial.frictionCombine = PhysicsMaterialCombine.Maximum;
         }
-        
+
         if (movingMaterial == null)
         {
             movingMaterial = new PhysicsMaterial("Moving");
@@ -65,7 +80,7 @@ public class Player : Entity
             movingMaterial.frictionCombine = PhysicsMaterialCombine.Minimum;
         }
     }
-    
+
     /// <summary>
     /// 固定更新逻辑，在FixedUpdate中调用重力增强、墙体接触检测及物理材质更新。
     /// </summary>
@@ -75,19 +90,52 @@ public class Player : Entity
         CheckWallContact();
         UpdatePhysicsMaterial();
     }
-    
+
+    /// <summary>
+    /// 主循环中的每帧更新逻辑，包括旋转、移动、跳跃、地面检测以及交互操作。
+    /// </summary>
+    private void Update()
+    {
+        if (CheckInventory())
+        {
+            return;
+        }
+
+        CheckRotation();
+        CheckMovement();
+        CheckJump();
+        CheckGrounded();
+
+        CheckTargetBlock();
+
+        CheckBreakAndPlace();
+    }
+
+    /// <summary>
+    /// 初始化方块容器，查找或创建
+    /// </summary>
+    private void InitBlockContainer()
+    {
+        GameObject container = GameObject.Find(blockContainerName);
+
+        if (container == null)
+        {
+            container = new GameObject(blockContainerName);
+        }
+
+        blockContainer = container.transform;
+    }
+
     /// <summary>
     /// 检测是否贴墙（侧面碰撞检测），通过从胶囊体中心向四个方向发射射线判断是否接触到墙体。
     /// </summary>
     private void CheckWallContact()
     {
         if (capsuleCollider == null) return;
-        
-        // 从胶囊体中心向四个方向检测墙壁
+
         float checkDistance = capsuleCollider.radius + 0.05f;
         Vector3 center = transform.position + capsuleCollider.center;
-        
-        // 检测前后左右四个方向
+
         Vector3[] directions =
         {
             transform.forward,
@@ -95,7 +143,7 @@ public class Player : Entity
             transform.right,
             -transform.right
         };
-        
+
         isTouchingWall = false;
         foreach (var dir in directions)
         {
@@ -106,7 +154,7 @@ public class Player : Entity
             }
         }
     }
-    
+
     /// <summary>
     /// 根据玩家当前的状态（是否着地、是否正在移动、是否贴墙）动态切换物理材质，
     /// 实现更自然的角色操控体验。
@@ -114,35 +162,29 @@ public class Player : Entity
     private void UpdatePhysicsMaterial()
     {
         if (capsuleCollider == null) return;
-        
-        // 获取移动输入
+
         float horizontalInput = Mathf.Abs(Input.GetAxis("Horizontal"));
         float verticalInput = Mathf.Abs(Input.GetAxis("Vertical"));
         isMoving = horizontalInput > moveInputThreshold || verticalInput > moveInputThreshold;
-        
-        // 决定使用哪种材质
+
         bool shouldUseStandingMaterial = false;
-        
+
         if (grounded && !isMoving)
         {
-            // 站在地面且不移动 → 高摩擦力（防止边缘滑落）
             shouldUseStandingMaterial = true;
         }
         else if (!grounded && isTouchingWall)
         {
-            // 空中且贴墙 → 低摩擦力（防止卡墙）
             shouldUseStandingMaterial = false;
         }
         else if (isMoving)
         {
-            // 正在移动 → 低摩擦力（顺滑移动）
             shouldUseStandingMaterial = false;
         }
-        
-        // 应用材质
-        capsuleCollider.material = shouldUseStandingMaterial ?  standingMaterial : movingMaterial;
+
+        capsuleCollider.material = shouldUseStandingMaterial ? standingMaterial : movingMaterial;
     }
-    
+
     /// <summary>
     /// 对刚体施加额外的重力效果，提升下落速度或空中控制感。
     /// </summary>
@@ -156,29 +198,9 @@ public class Player : Entity
     }
 
     /// <summary>
-    /// 主循环中的每帧更新逻辑，包括旋转、移动、跳跃、地面检测以及交互操作。
-    /// </summary>
-    private void Update()
-    {
-        // 物品栏打开时禁用游戏操作
-        if (CheckInventory())
-        {
-            return; // 跳过所有游戏逻辑
-        }
-        
-        CheckRotation();
-        CheckMovement();
-        CheckJump();
-        CheckGrounded();
-        
-        CheckTargetBlock();
-        
-        CheckBreakAndPlace();
-    }
-    
-    /// <summary>
     /// 检查物品栏状态并在打开时禁用相关游戏操作
     /// </summary>
+    /// <returns>如果物品栏处于开启状态则返回true，否则返回false。</returns>
     private bool CheckInventory()
     {
         if (Inventory.open)
@@ -189,12 +211,18 @@ public class Player : Entity
                 breakingBlock.CancelBreak();
                 breakingBlock = null;
             }
+
             breakSeconds = 0;
+
+            // 停止玩家的水平移动，只保留垂直速度（重力）
+            rigidbody.linearVelocity = new Vector3(0, rigidbody.linearVelocity.y, 0);
+
             return true;
         }
+
         return false;
     }
-    
+
     /// <summary>
     /// 检查玩家是否站在可行走的地面上，通过球形检测脚底区域实现。
     /// </summary>
@@ -209,7 +237,8 @@ public class Player : Entity
     /// <summary>
     /// 处理鼠标输入来控制摄像机和玩家朝向的旋转。
     /// </summary>
-    private void CheckRotation() {
+    private void CheckRotation()
+    {
         float mouseX = Input.GetAxisRaw("Mouse X") * Time.deltaTime * cameraSettings.sensitivityX;
         float mouseY = Input.GetAxisRaw("Mouse Y") * Time.deltaTime * cameraSettings.sensitivityY;
 
@@ -226,7 +255,7 @@ public class Player : Entity
     /// <summary>
     /// 控制玩家水平方向上的移动速度，基于键盘输入进行位移计算。
     /// </summary>
-    private void CheckMovement() 
+    private void CheckMovement()
     {
         rigidbody.linearVelocity = new Vector3(Input.GetAxis("Horizontal") * speed,
             rigidbody.linearVelocity.y, Input.GetAxis("Vertical") * speed);
@@ -237,9 +266,21 @@ public class Player : Entity
     /// <summary>
     /// 判断是否满足跳跃条件并在按下跳跃键时执行跳跃动作。
     /// </summary>
-    private void CheckJump() 
+    private void CheckJump()
     {
         if (!grounded)
+        {
+            return;
+        }
+
+        // 检查跳跃冷却
+        if (Time.time - lastJumpTime < jumpCooldown)
+        {
+            return;
+        }
+
+        // 检查垂直速度，防止在被弹起时跳跃
+        if (Mathf.Abs(rigidbody.linearVelocity.y) > maxVerticalSpeedToJump)
         {
             return;
         }
@@ -247,64 +288,56 @@ public class Player : Entity
         if (Input.GetButtonDown("Jump"))
         {
             Jump();
+            lastJumpTime = Time.time;
         }
     }
-    
+
     /// <summary>
     /// 检查玩家的破坏和放置方块输入操作
     /// </summary>
-    private void CheckBreakAndPlace() 
+    private void CheckBreakAndPlace()
     {
-        // 检测左键持续按下状态，用于破坏方块
         if (Input.GetButton("Fire1"))
         {
             TryBreakBlock();
         }
         else
         {
-            // 左键未按下时，取消正在进行的破坏操作
             if (breakingBlock != null)
             {
                 breakingBlock.CancelBreak();
                 breakingBlock = null;
             }
-            breakSeconds = 0; 
+
+            breakSeconds = 0;
         }
-        
-        // 检测右键按下事件，用于放置方块
+
         if (Input.GetButtonDown("Fire2"))
         {
             TryPlaceBlock();
         }
     }
 
-
     /// <summary>
     /// 使用射线投射检测准心所指的目标方块对象。
     /// </summary>
-    private void CheckTargetBlock() 
+    private void CheckTargetBlock()
     {
-        //每一帧必须先清空目标 清除上一帧的方块引用
         targetBlock = null;
 
         RaycastHit hit;
         Ray ray = cameraSettings.camera.ScreenPointToRay(Input.mousePosition);
-        
-        // 如果射线没打中任何东西，逻辑正确结束
-        if (Physics.Raycast(ray, out hit)) 
+
+        if (Physics.Raycast(ray, out hit))
         {
-            // 获取命中的物体
             Transform objectHit = hit.transform;
             Block blockComponent = objectHit.GetComponent<Block>();
 
-            // 如果命中的不是方块，直接返回
             if (blockComponent == null)
                 return;
-            // 如果距离超过操作范围，直接返回
             if (Vector3.Distance(transform.position, objectHit.position) > range)
                 return;
-            
-            // 只有完全符合条件，才赋值
+
             targetRaycastHit = hit;
             targetBlock = blockComponent;
         }
@@ -313,39 +346,35 @@ public class Player : Entity
     /// <summary>
     /// 尝试持续破坏目标方块，根据按住时间累积进度直到完成破坏。
     /// </summary>
-    private void TryBreakBlock() 
+    private void TryBreakBlock()
     {
-        // 若无目标方块，则重置破坏时间和引用
         if (!targetBlock)
         {
-            // 如果之前有正在破坏的方块，通知它停止
             if (breakingBlock != null)
             {
                 breakingBlock.CancelBreak();
                 breakingBlock = null;
             }
+
             breakSeconds = 0;
             return;
         }
 
-        // 如果正在破坏的方块与当前目标不同，则重新开始计时
         if (breakingBlock != targetBlock)
         {
-            // 通知上一个方块停止特效
             if (breakingBlock != null)
             {
                 breakingBlock.CancelBreak();
             }
+
             breakSeconds = 0;
         }
-        
+
         breakingBlock = targetBlock;
         breakSeconds += Time.deltaTime;
-        
-        // 调用方块自身的破坏尝试逻辑
+
         bool breakSuccess = targetBlock.TryBreak(breakSeconds);
-        
-        // 破坏成功后重置计时器
+
         if (breakSuccess)
         {
             breakSeconds = 0;
@@ -356,52 +385,40 @@ public class Player : Entity
     /// <summary>
     /// 在目标方块相邻位置尝试放置一个新的方块实例。
     /// </summary>
-    void TryPlaceBlock() 
+    void TryPlaceBlock()
     {
-        // 若没有有效目标方块则不执行放置逻辑
-        if (! targetBlock)
+        if (!targetBlock)
             return;
-    
-        // 获取碰撞点的法线
+
         Vector3 hitNormal = targetRaycastHit.normal;
-    
-        // 将法线取整，消除浮点数误差
+
         Vector3 placeDirection = new Vector3(
-            Mathf.Round(hitNormal. x),
+            Mathf.Round(hitNormal.x),
             Mathf.Round(hitNormal.y),
-            Mathf. Round(hitNormal.z)
+            Mathf.Round(hitNormal.z)
         );
-        // 计算新方块的目标位置
         Vector3 newBlockPosition = targetBlock.transform.position + placeDirection;
-        // 二次距离检测，检查新放置的位置是否超出了玩家的 range
         if (Vector3.Distance(transform.position, newBlockPosition) > range)
         {
             return;
         }
-        
-        // 获取玩家碰撞体信息
+
         CapsuleCollider playerCapsule = GetComponent<CapsuleCollider>();
-        float playerFootY = transform.position.y + playerCapsule. center.y - playerCapsule. height / 2f;
-        
-        // 判断方块是否放置在玩家脚底以下（脚下放置允许）
-        // 方块顶部 Y = newBlockPosition.y + 0.5（假设方块大小为1）
+        float playerFootY = transform.position.y + playerCapsule.center.y - playerCapsule.height / 2f;
+
         float blockTopY = newBlockPosition.y + 0.5f;
-        bool isPlacingBelowFeet = blockTopY <= playerFootY + 0.1f; // 加一点容差
-        
-        // 玩家防卡死检测
-        Collider[] colliders = Physics. OverlapBox(newBlockPosition, Vector3.one * 0.45f, Quaternion.identity);
-        
+        bool isPlacingBelowFeet = blockTopY <= playerFootY + 0.1f;
+
+        Collider[] colliders = Physics.OverlapBox(newBlockPosition, Vector3.one * 0.45f, Quaternion.identity);
+
         foreach (Collider col in colliders)
         {
-            // 如果碰撞体是玩家自身
             if (col.gameObject == this.gameObject)
             {
-                // 如果是脚下放置，允许（玩家会站在方块上）
                 if (isPlacingBelowFeet)
                 {
                     continue;
                 }
-                // 如果不是脚下放置（方块会与玩家身体重叠），阻止放置
                 else
                 {
                     return;
@@ -409,69 +426,42 @@ public class Player : Entity
             }
             else
             {
-                // 如果碰撞体不是玩家，阻止放置
                 return;
             }
         }
-        
-        GameObject block = Instantiate(activeBlock. gameObject);
+
+        // 确保容器存在
+        if (blockContainer == null)
+        {
+            InitBlockContainer();
+        }
+
+        // 在容器下创建方块
+        GameObject block = Instantiate(activeBlock.gameObject, blockContainer);
         block.transform.position = newBlockPosition;
     }
-    
-    // private void OnDrawGizmosSelected()
-    // {
-    //     CapsuleCollider capsule = GetComponent<CapsuleCollider>();
-    //     if (capsule != null)
-    //     {
-    //         // 地面检测可视化
-    //         Gizmos.color = grounded ? Color.green : Color.red;
-    //         Vector3 footPosition = transform.position + capsule.center - Vector3.up * (capsule.height / 2f);
-    //         Vector3 checkPosition = footPosition + Vector3.down * 0.1f;
-    //         Gizmos.DrawWireSphere(checkPosition, groundCheckRadius);
-    //         
-    //         // 墙壁检测可视化
-    //         Gizmos.color = isTouchingWall ? Color.yellow : Color.cyan;
-    //         float checkDistance = capsule.radius + 0.05f;
-    //         Vector3 center = transform.position + capsule.center;
-    //         Gizmos.DrawRay(center, transform.forward * checkDistance);
-    //         Gizmos.DrawRay(center, -transform.forward * checkDistance);
-    //         Gizmos.DrawRay(center, transform.right * checkDistance);
-    //         Gizmos.DrawRay(center, -transform.right * checkDistance);
-    //     }
-    // }
-    
-    // private void OnDrawGizmos()
-    // {
-    //     if (targetBlock != null)
-    //     {
-    //         Gizmos.color = Color.yellow;
-    //         Gizmos.DrawWireCube(targetBlock.transform.position, Vector3.one);
-    //     }
-    //     
-    //     if (targetBlock != null && Input.GetButton("Fire2"))
-    //     {
-    //         Vector3 hitNormal = targetRaycastHit.normal;
-    //         Vector3 placeDirection = new Vector3(
-    //             Mathf.Round(hitNormal.x),
-    //             Mathf.Round(hitNormal.y),
-    //             Mathf.Round(hitNormal.z)
-    //         );
-    //         Vector3 placePosition = targetBlock.transform.position + placeDirection;
-    //         
-    //         Gizmos.color = Color.green;
-    //         Gizmos.DrawCube(placePosition, Vector3.one * 0.9f);
-    //     }
-    // }
-    
+
+    /// <summary>
+    /// 获取物品并添加到玩家库存中。
+    /// 由掉落物（Drop）拾取时调用。
+    /// </summary>
+    /// <param name="item">要添加到库存的物品</param>
+    public void GetItem(Item item)
+    {
+        if (inventory != null)
+        {
+            inventory.GetItem(item);
+        }
+    }
+
     /// <summary>
     /// 存储摄像机相关配置信息的数据结构。
-    /// 包含摄像机组件引用及其横向和纵向灵敏度参数。
     /// </summary>
     [System.Serializable]
-    public struct CameraSettings 
+    public struct CameraSettings
     {
-        public Camera camera;               // 当前使用的摄像机组件
-        public float sensitivityX;          // 横向旋转灵敏度
-        public float sensitivityY;          // 纵向旋转灵敏度
+        public Camera camera;
+        public float sensitivityX;
+        public float sensitivityY;
     }
 }

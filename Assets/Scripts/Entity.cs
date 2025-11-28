@@ -14,7 +14,7 @@ public class Entity : MonoBehaviour
     /// <summary>
     /// 唤醒时调用的方法，获取刚体组件
     /// </summary>
-    public virtual void Awake() 
+    public virtual void Awake()
     {
         // 获取当前对象的Rigidbody组件
         rigidbody = GetComponent<Rigidbody>();
@@ -23,7 +23,7 @@ public class Entity : MonoBehaviour
     /// <summary>
     /// 执行跳跃动作，给刚体施加向上的力
     /// </summary>
-    public void Jump() 
+    public void Jump()
     {
         // 给刚体施加向上的冲量力实现跳跃效果
         rigidbody.AddForce(Vector3.up * jump, ForceMode.Impulse);
