@@ -14,6 +14,10 @@ public class InventoryItem : MonoBehaviour
     public int amount;
 
     [HideInInspector] public InventorySlot lastSlot;
+    
+    [HideInInspector] public Item scriptableItem;
+    
+    [HideInInspector] public bool justCrafted;
 
     /// <summary>
     /// 每帧更新方法，用于记录物品当前所在的槽位。

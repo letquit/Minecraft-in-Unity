@@ -47,6 +47,9 @@ public class Player : Entity
 
     [Header("Block Container")] [Tooltip("存放放置方块的容器名称")]
     public string blockContainerName = "Blocks";
+    
+    [Header("UI")] [Tooltip("所有UI界面")]
+    public UI[] uis;
 
     private Transform blockContainer;
 
@@ -96,19 +99,66 @@ public class Player : Entity
     /// </summary>
     private void Update()
     {
+        // 检测 E 键按下，切换背包显示状态
+        if (Input.GetKeyDown(KeyCode.E))
+        {
+            TryToggleInventory();
+        }
+        
+        // 检查背包是否打开，如果打开则暂停游戏逻辑
         if (CheckInventory())
         {
             return;
         }
 
+        // 处理角色旋转逻辑
         CheckRotation();
+        
+        // 处理角色移动逻辑
         CheckMovement();
+        
+        // 处理角色跳跃逻辑
         CheckJump();
+        
+        // 检测角色是否在地面上
         CheckGrounded();
 
+        // 检测目标方块
         CheckTargetBlock();
 
+        // 检查破坏和放置方块操作
         CheckBreakAndPlace();
+    }
+    
+    /// <summary>
+    /// 尝试切换物品栏，如果有其他UI打开则先关闭
+    /// </summary>
+    private void TryToggleInventory()
+    {
+        // 检查是否有其他UI打开
+        bool otherUIOpen = false;
+    
+        if (uis != null)
+        {
+            foreach (UI ui in uis)
+            {
+                if (ui == null) continue;
+                if (ui == inventory) continue; // 跳过背包本身
+            
+                if (ui.isOpen)
+                {
+                    ui.Toggle();
+                    otherUIOpen = true;
+                    break;
+                }
+            }
+        }
+    
+        // 如果没有其他UI打开，则切换背包
+        if (!otherUIOpen && inventory != null)
+        {
+            inventory.Toggle();
+        }
     }
 
     /// <summary>
@@ -198,12 +248,12 @@ public class Player : Entity
     }
 
     /// <summary>
-    /// 检查物品栏状态并在打开时禁用相关游戏操作
+    /// 检查是否有任何UI界面打开，并在打开时禁用相关游戏操作
     /// </summary>
-    /// <returns>如果物品栏处于开启状态则返回true，否则返回false。</returns>
+    /// <returns>如果有UI打开则返回true，否则返回false</returns>
     private bool CheckInventory()
     {
-        if (Inventory.open)
+        if (UIOpen())
         {
             // 停止破坏方块
             if (breakingBlock != null)
@@ -220,6 +270,29 @@ public class Player : Entity
             return true;
         }
 
+        return false;
+    }
+    
+    /// <summary>
+    /// 检查是否有任何UI界面处于打开状态
+    /// </summary>
+    /// <returns>如果有UI打开则返回true</returns>
+    public bool UIOpen()
+    {
+        // 先检查传统的 Inventory.open 静态变量
+        if (Inventory.open) return true;
+    
+        // 再检查 UI 数组
+        if (uis != null)
+        {
+            foreach (UI ui in uis)
+            {
+                if (ui != null && ui.isOpen)
+                {
+                    return true;
+                }
+            }
+        }
         return false;
     }
 
@@ -383,13 +456,24 @@ public class Player : Entity
     }
 
     /// <summary>
-    /// 在目标方块相邻位置尝试放置一个新的方块实例。
+    /// 尝试在目标方块的相邻位置放置一个新的方块实例。该方法会根据射线检测到的目标方块法线方向，
+    /// 计算新方块应放置的位置，并进行距离、碰撞等检查后执行放置操作。
+    /// 如果目标方块是工作台类型，则打开其UI界面而不是放置新方块。
     /// </summary>
-    void TryPlaceBlock()
+    private void TryPlaceBlock()
     {
         if (!targetBlock)
             return;
 
+        // 检查是否点击了工作台方块
+        CraftingTableBlock craftingTableBlock = targetBlock.GetComponent<CraftingTableBlock>();
+        if (craftingTableBlock != null)
+        {
+            craftingTableBlock.OpenUI();
+            return;
+        }
+
+        // 根据击中法线计算新的方块放置方向并确定位置
         Vector3 hitNormal = targetRaycastHit.normal;
 
         Vector3 placeDirection = new Vector3(
@@ -398,17 +482,21 @@ public class Player : Entity
             Mathf.Round(hitNormal.z)
         );
         Vector3 newBlockPosition = targetBlock.transform.position + placeDirection;
+
+        // 判断玩家与待放置方块之间的距离是否超出范围
         if (Vector3.Distance(transform.position, newBlockPosition) > range)
         {
             return;
         }
 
+        // 获取玩家脚部高度用于判断是否在脚下放置方块
         CapsuleCollider playerCapsule = GetComponent<CapsuleCollider>();
         float playerFootY = transform.position.y + playerCapsule.center.y - playerCapsule.height / 2f;
 
         float blockTopY = newBlockPosition.y + 0.5f;
         bool isPlacingBelowFeet = blockTopY <= playerFootY + 0.1f;
 
+        // 检测目标位置是否有其他物体（包括自身）发生碰撞
         Collider[] colliders = Physics.OverlapBox(newBlockPosition, Vector3.one * 0.45f, Quaternion.identity);
 
         foreach (Collider col in colliders)

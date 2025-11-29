@@ -6,17 +6,12 @@ using UnityEngine;
 /// <summary>
 /// 库存系统管理器，用于控制玩家物品栏的显示、隐藏以及物品拖拽逻辑。
 /// </summary>
-public class Inventory : MonoBehaviour
+public class Inventory : UI
 {
     /// <summary>
     /// UI画布组件引用。
     /// </summary>
     public Canvas canvas;
-
-    /// <summary>
-    /// 物品栏窗口图像组件，用于控制其激活状态。
-    /// </summary>
-    public Image window;
 
     /// <summary>
     /// 所有库存槽位数组。
@@ -93,21 +88,51 @@ public class Inventory : MonoBehaviour
     [Tooltip("丢弃距离")] public float throwDistance = 3f;
 
     /// <summary>
+    /// 合成槽位数组（2x2或3x3格子）
+    /// </summary>
+    [Header("Crafting")] 
+    [Tooltip("合成槽位数组")]
+    public InventorySlot[] craftingSlots;
+
+    /// <summary>
+    /// 合成结果槽位
+    /// </summary>
+    [Tooltip("合成结果槽位")]
+    public InventorySlot outputSlot;
+
+    /// <summary>
+    /// 可合成的物品列表
+    /// </summary>
+    [Tooltip("可合成的物品列表")]
+    public Item[] craftableItems;
+
+    /// <summary>
     /// 玩家引用
     /// </summary>
     private Player player;
 
     /// <summary>
-    /// 初始化方法。
+    /// 初始化方法，在对象启用时调用。
+    /// 设置初始状态为关闭，隐藏窗口，锁定并隐藏光标。
+    /// 获取画布 RectTransform 和玩家对象引用。
+    /// 遍历所有物品槽位，如果槽位中有物品，则为其添加触发器。
     /// </summary>
     private void Start()
     {
+        // 确保初始状态是关闭的
+        window.gameObject.SetActive(false);
+        isOpen = false;
+        open = false;
+        Cursor.visible = false;
+        Cursor.lockState = CursorLockMode.Locked;
+        
         windowRect = canvas.GetComponent<RectTransform>();
         player = FindFirstObjectByType<Player>();
 
+        // 遍历所有物品槽位，如果有物品则添加触发器
         foreach (InventorySlot slot in slots)
         {
-            if (slot.item != null)
+            if (slot. item != null)
             {
                 AddItemTriggers(slot.item);
             }
@@ -120,14 +145,13 @@ public class Inventory : MonoBehaviour
     /// </summary>
     private void Update()
     {
-        // 检测 E 键按下，切换背包显示状态
-        if (Input.GetKeyDown(KeyCode.E))
-        {
-            ToggleInventory();
-        }
-
+        // 如果UI未打开，不处理后续逻辑
+        if (!isOpen) return;
+        
         // 更新选中槽位的高亮显示
         UpdateSlotHighlight();
+        
+        CheckRecipes();
 
         // 处理物品拖拽逻辑
         if (draggedItem)
@@ -172,6 +196,307 @@ public class Inventory : MonoBehaviour
         // 重置刚拾取标记
         justPickedUp = false;
     }
+    
+    /// <summary>
+    /// 公共方法：给物品添加触发器（供 CraftingTable 调用）。
+    /// </summary>
+    /// <param name="item">需要添加触发器的物品实例。</param>
+    public void AddItemTriggersPublic(InventoryItem item)
+    {
+        AddItemTriggers(item);
+    }
+
+    #region 合成系统
+
+    /// <summary>
+    /// 检查当前合成格子中的物品是否能组成某个配方。
+    /// 若存在匹配的配方，则在输出槽中显示对应的结果物品；否则清除输出槽中刚合成但尚未取出的物品。
+    /// </summary>
+    private void CheckRecipes()
+    {
+        // 检查必要组件是否存在
+        if (craftingSlots == null || craftingSlots.Length == 0 || outputSlot == null)
+            return;
+
+        // 将当前合成格子转换为配方并归一化
+        Recipe currentRecipe = NormalizeRecipe(GridToRecipe());
+        bool recipeFound = false;
+
+        // 遍历所有可合成物品，检查配方是否匹配
+        foreach (Item item in craftableItems)
+        {
+            if (item == null || item.recipe.IsEmpty())
+                continue;
+
+            // 归一化物品配方后比较
+            Recipe normalizedItemRecipe = NormalizeRecipe(item.recipe);
+        
+            if (currentRecipe == normalizedItemRecipe)
+            {
+                recipeFound = true;
+
+                // 如果输出槽已有物品，不重复创建
+                if (outputSlot.item != null)
+                    break;
+
+                // 创建输出物品
+                InventoryItem outputItem = InstantiateCraftingItem(item, outputSlot);
+                AddOutputItemTriggers(outputItem);
+                outputItem.justCrafted = true;
+
+                break;
+            }
+        }
+
+        // 如果没有匹配的配方，移除输出槽中刚合成但未取走的物品
+        if (!recipeFound && outputSlot.item != null)
+        {
+            if (outputSlot.item.justCrafted)
+            {
+                Destroy(outputSlot.item.gameObject);
+                outputSlot.item = null;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// 对给定的配方进行归一化处理，将其内容向左上角对齐以消除位置差异带来的影响。
+    /// </summary>
+    /// <param name="recipe">需要被归一化的原始配方</param>
+    /// <returns>经过归一化处理的新配方对象</returns>
+    private Recipe NormalizeRecipe(Recipe recipe)
+    {
+        // 将配方转换为一维数组 (索引: row * 3 + col)
+        Item[] grid = new Item[9];
+        grid[0] = recipe.topLeft;
+        grid[1] = recipe.topCenter;
+        grid[2] = recipe.topRight;
+        grid[3] = recipe.middleLeft;
+        grid[4] = recipe.middleCenter;
+        grid[5] = recipe.middleRight;
+        grid[6] = recipe.bottomLeft;
+        grid[7] = recipe.bottomCenter;
+        grid[8] = recipe.bottomRight;
+
+        // 计算最小行和最小列（找到配方的左上角边界）
+        int minRow = 3, minCol = 3;
+        for (int i = 0; i < 9; i++)
+        {
+            if (grid[i] != null)
+            {
+                int row = i / 3;
+                int col = i % 3;
+                if (row < minRow) minRow = row;
+                if (col < minCol) minCol = col;
+            }
+        }
+
+        // 如果配方为空，返回空配方
+        if (minRow == 3 || minCol == 3)
+        {
+            return new Recipe();
+        }
+
+        // 创建归一化后的配方（移动到左上角）
+        Item[] normalizedGrid = new Item[9];
+        for (int row = 0; row < 3; row++)
+        {
+            for (int col = 0; col < 3; col++)
+            {
+                int srcRow = row + minRow;
+                int srcCol = col + minCol;
+                if (srcRow < 3 && srcCol < 3)
+                {
+                    int srcIndex = srcRow * 3 + srcCol;
+                    int destIndex = row * 3 + col;
+                    normalizedGrid[destIndex] = grid[srcIndex];
+                }
+            }
+        }
+
+        // 转换回Recipe结构
+        Recipe normalized = new Recipe();
+        normalized.topLeft = normalizedGrid[0];
+        normalized.topCenter = normalizedGrid[1];
+        normalized.topRight = normalizedGrid[2];
+        normalized.middleLeft = normalizedGrid[3];
+        normalized.middleCenter = normalizedGrid[4];
+        normalized.middleRight = normalizedGrid[5];
+        normalized.bottomLeft = normalizedGrid[6];
+        normalized.bottomCenter = normalizedGrid[7];
+        normalized.bottomRight = normalizedGrid[8];
+
+        return normalized;
+    }
+
+    /// <summary>
+    /// 根据当前合成格子的内容构建一个Recipe对象。
+    /// 支持两种尺寸：2x2 和 3x3 的合成网格。
+    /// </summary>
+    /// <returns>表示当前合成格子布局的Recipe对象</returns>
+    private Recipe GridToRecipe()
+    {
+        Recipe recipe = new Recipe();
+
+        if (craftingSlots.Length == 4)
+        {
+            // 2x2 合成格（背包内）
+            if (craftingSlots[0].item) recipe.topLeft = craftingSlots[0].item.scriptableItem;
+            if (craftingSlots[1].item) recipe.topCenter = craftingSlots[1].item.scriptableItem;
+            if (craftingSlots[2].item) recipe.middleLeft = craftingSlots[2].item.scriptableItem;
+            if (craftingSlots[3].item) recipe.middleCenter = craftingSlots[3].item.scriptableItem;
+        }
+        else if (craftingSlots.Length == 9)
+        {
+            // 3x3 合成格（工作台）
+            if (craftingSlots[0].item) recipe.topLeft = craftingSlots[0].item.scriptableItem;
+            if (craftingSlots[1].item) recipe.topCenter = craftingSlots[1].item.scriptableItem;
+            if (craftingSlots[2].item) recipe.topRight = craftingSlots[2].item.scriptableItem;
+            if (craftingSlots[3].item) recipe.middleLeft = craftingSlots[3].item.scriptableItem;
+            if (craftingSlots[4].item) recipe.middleCenter = craftingSlots[4].item.scriptableItem;
+            if (craftingSlots[5].item) recipe.middleRight = craftingSlots[5].item.scriptableItem;
+            if (craftingSlots[6].item) recipe.bottomLeft = craftingSlots[6].item.scriptableItem;
+            if (craftingSlots[7].item) recipe.bottomCenter = craftingSlots[7].item.scriptableItem;
+            if (craftingSlots[8].item) recipe.bottomRight = craftingSlots[8].item.scriptableItem;
+        }
+
+        return recipe;
+    }
+
+    /// <summary>
+    /// 处理从输出槽开始拖动物品的行为。此方法会在玩家点击输出槽中的物品时调用，
+    /// 它负责消耗原材料、更新UI状态，并启动正常的物品拖拽流程。
+    /// </summary>
+    /// <param name="item">要被拖动的输出槽物品实例</param>
+    private void StartOutputDrag(InventoryItem item)
+    {
+        item.justCrafted = false;
+
+        // 重置触发器为普通物品触发器
+        EventTrigger trigger = item.GetComponent<EventTrigger>();
+        if (trigger != null)
+        {
+            trigger.triggers.Clear();
+        }
+        AddItemTriggers(item);
+
+        // 消耗合成材料（每个材料减少1个）
+        foreach (InventorySlot craftingSlot in craftingSlots)
+        {
+            if (craftingSlot.item == null)
+                continue;
+
+            if (craftingSlot.item.amount > 1)
+            {
+                craftingSlot.item.IncreaseAmount(-1);
+            }
+            else
+            {
+                Destroy(craftingSlot.item.gameObject);
+                craftingSlot.item = null;
+            }
+        }
+
+        // 开始正常拖动
+        StartDrag(item, true);
+    }
+
+    /// <summary>
+    /// 给输出槽中的物品添加特殊的事件监听器，使其能够响应用户的点击操作来触发合成完成逻辑。
+    /// </summary>
+    /// <param name="item">输出槽中的物品实例</param>
+    private void AddOutputItemTriggers(InventoryItem item)
+    {
+        EventTrigger trigger = item.GetComponent<EventTrigger>();
+        if (trigger == null)
+        {
+            trigger = item.gameObject.AddComponent<EventTrigger>();
+        }
+        trigger.triggers.Clear();
+
+        EventTrigger.Entry pointerDownEntry = new EventTrigger.Entry();
+        pointerDownEntry.eventID = EventTriggerType.PointerDown;
+        pointerDownEntry.callback.AddListener((eventData) =>
+        {
+            StartOutputDrag(item);
+        });
+        trigger.triggers.Add(pointerDownEntry);
+    }
+
+    /// <summary>
+    /// 在指定槽位中实例化一个新的合成结果物品。
+    /// </summary>
+    /// <param name="item">用于创建新物品的数据源</param>
+    /// <param name="slot">目标槽位</param>
+    /// <returns>新创建的物品实例</returns>
+    private InventoryItem InstantiateCraftingItem(Item item, InventorySlot slot)
+    {
+        Transform actualParent = itemParent;
+
+        if (actualParent == null)
+        {
+            actualParent = slot.transform.parent;
+        }
+
+        InventoryItem inventoryItem = Instantiate(itemPrefab, actualParent);
+        inventoryItem.transform.position = slot.transform.position;
+        inventoryItem.itemName = item.name;
+        inventoryItem.scriptableItem = item;
+        inventoryItem.SetSprite(item.sprite);
+        inventoryItem.SetAmount(1);
+
+        inventoryItem.slot = slot;
+        inventoryItem.lastSlot = slot;
+        slot.item = inventoryItem;
+
+        return inventoryItem;
+    }
+
+    /// <summary>
+    /// 当关闭背包界面时，将合成槽内的所有物品返还至玩家库存，并清理相关资源。
+    /// 同时也会销毁输出槽中尚未领取的合成产物。
+    /// </summary>
+    private void ClearCraftingSlots()
+    {
+        if (craftingSlots == null) return;
+
+        foreach (InventorySlot slot in craftingSlots)
+        {
+            if (slot.item != null)
+            {
+                // 尝试将物品放回背包
+                Item itemData = slot.item.scriptableItem;
+                int amount = slot.item.amount;
+                
+                // 检查 itemData 是否有效
+                if (itemData == null)
+                {
+                    // 尝试通过名称获取
+                    itemData = GetItemDataByName(slot.item.itemName);
+                }
+
+                if (itemData != null)
+                {
+                    for (int i = 0; i < amount; i++)
+                    {
+                        GetItem(itemData);
+                    }
+                }
+
+                Destroy(slot.item.gameObject);
+                slot.item = null;
+            }
+        }
+
+        // 清空输出槽中刚合成但未取走的物品
+        if (outputSlot != null && outputSlot.item != null && outputSlot.item.justCrafted)
+        {
+            Destroy(outputSlot.item.gameObject);
+            outputSlot.item = null;
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// 更新槽位高亮效果。
@@ -250,17 +575,32 @@ public class Inventory : MonoBehaviour
     }
 
     /// <summary>
-    /// 尝试拆分当前拖拽的物品。
+    /// 尝试拆分当前正在拖拽的物品，并将其部分数量放置到最近的有效库存槽位中。
+    /// 如果目标槽位已有相同类型的物品且未满，则增加其数量；
+    /// 否则，在该槽位创建一个新的物品实例并减少原物品的数量。
     /// </summary>
     private void TrySplitItem()
     {
         if (draggedItem == null) return;
 
-        float minDistance = 1000;
+        // 获取鼠标在屏幕上的位置，用于计算距离最近的槽位
+        Vector2 mouseScreenPos = Input.mousePosition;
+        Camera eventCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        
+        float minDistance = float.MaxValue;
         InventorySlot targetSlot = null;
-        foreach (InventorySlot slot in slots)
+        
+        // 获取所有可以放置物品的有效槽位
+        InventorySlot[] validSlots = GetValidDropSlots();
+        
+        // 遍历有效槽位，找出距离鼠标位置最近的一个
+        foreach (InventorySlot slot in validSlots)
         {
-            float distance = Vector2.Distance(draggedItem.transform.position, slot.transform.position);
+            if (slot == null) continue;
+            
+            Vector2 slotScreenPos = RectTransformUtility.WorldToScreenPoint(eventCamera, slot.transform.position);
+            float distance = Vector2.Distance(mouseScreenPos, slotScreenPos);
+            
             if (distance < minDistance)
             {
                 minDistance = distance;
@@ -268,22 +608,30 @@ public class Inventory : MonoBehaviour
             }
         }
 
-        if (targetSlot == null) return;
+        // 没有找到合适的槽位时直接丢弃物品
+        if (targetSlot == null) 
+        {
+            return;
+        }
 
+        // 目标槽位已经有物品的情况处理
         if (targetSlot.item != null)
         {
+            // 物品类型不同则放弃合并操作并丢弃
             if (draggedItem.itemName != targetSlot.item.itemName)
             {
                 Drop(draggedItem);
                 return;
             }
 
+            // 物品堆叠已达到上限（64）则丢弃
             if (targetSlot.item.amount >= 64)
             {
                 Drop(draggedItem);
                 return;
             }
 
+            // 当前拖拽物品数量大于1时转移一个单位至目标槽位
             if (draggedItem.amount > 1)
             {
                 targetSlot.item.IncreaseAmount(1);
@@ -291,6 +639,7 @@ public class Inventory : MonoBehaviour
             }
             else
             {
+                // 若只剩一个物品且能放入目标槽位，则销毁原对象
                 if (targetSlot.item.amount + 1 <= 64)
                 {
                     targetSlot.item.IncreaseAmount(1);
@@ -302,17 +651,32 @@ public class Inventory : MonoBehaviour
             return;
         }
 
+        // 目标槽位为空的情况
         if (draggedItem.amount <= 1)
         {
+            // 只剩一个物品时，直接放置到目标槽位（和左键行为一致）
+            draggedItem.transform.position = targetSlot.transform.position;
+            draggedItem.slot = targetSlot;
+            draggedItem.lastSlot = targetSlot;
+            targetSlot.item = draggedItem;
+            draggedItem = null;
             return;
         }
 
+        // 在目标槽位创建新的物品实例以完成拆分逻辑
         GameObject newItemObj = Instantiate(draggedItem.gameObject, parent: draggedItem.transform.parent);
         InventoryItem newItem = newItemObj.GetComponent<InventoryItem>();
+        
+        // 复制原始物品的数据到新物品上
+        newItem.scriptableItem = draggedItem.scriptableItem;
+        newItem.itemName = draggedItem.itemName;
+        newItem.icon = draggedItem.icon;
+        
         AddItemTriggers(newItem);
         newItem.SetAmount(1);
         draggedItem.IncreaseAmount(-1);
 
+        // 设置新物品的位置和所属槽位信息
         newItem.transform.position = targetSlot.transform.position;
         newItem.slot = targetSlot;
         newItem.lastSlot = targetSlot;
@@ -511,27 +875,29 @@ public class Inventory : MonoBehaviour
     /// <summary>
     /// 根据物品名称获取物品数据
     /// </summary>
+    /// <param name="itemName">要查找的物品名称</param>
+    /// <returns>找到的物品数据，如果未找到则返回null</returns>
     private Item GetItemDataByName(string itemName)
     {
-        // 从所有槽位中查找相同名称的物品来获取Item引用
-        foreach (InventorySlot slot in slots)
+        if (string.IsNullOrEmpty(itemName))
         {
-            if (slot.item != null && slot.item.itemName == itemName)
-            {
-                // 需要通过其他方式获取Item数据
-            }
+            return null;
         }
 
-        // 从Resources加载或使用物品注册表
+        // 从Resources加载所有物品
         Item[] allItems = Resources.LoadAll<Item>("Items");
+    
+        // 遍历所有物品，尝试多种匹配方式查找目标物品
         foreach (Item item in allItems)
         {
-            if (item.name == itemName)
+            if (item.name == itemName || 
+                item.name. Equals(itemName, System.StringComparison.OrdinalIgnoreCase) ||
+                item.name.Replace(" ", "") == itemName.Replace(" ", ""))
             {
                 return item;
             }
         }
-
+    
         return null;
     }
 
@@ -609,19 +975,43 @@ public class Inventory : MonoBehaviour
     /// </summary>
     public void ToggleInventory()
     {
+        Toggle();
+    }
+    
+    /// <summary>
+    /// 切换物品栏窗口的开启与关闭状态。
+    /// </summary>
+    public override void Toggle()
+    {
+        if (window == null)
+        {
+            return;
+        }
+        
         // 每次切换时，先清除鼠标选取状态
         ClearDraggedItem();
 
         bool enabled = !window.gameObject.activeSelf;
+
+        // 关闭时清空合成格子，将材料返回背包
+        if (!enabled)
+        {
+            ClearCraftingSlots();
+        }
+
         window.gameObject.SetActive(enabled);
+    
         Cursor.visible = enabled;
+        isOpen = enabled;
         open = enabled;
 
+        // 关闭时清除高亮显示
         if (!enabled)
         {
             ClearHighlight();
         }
 
+        // 根据窗口状态设置光标锁定模式
         if (enabled)
         {
             Cursor.lockState = CursorLockMode.None;
@@ -830,25 +1220,48 @@ public class Inventory : MonoBehaviour
 
     /// <summary>
     /// 停止拖动并决定将物品放入哪个槽位中。
+    /// 根据鼠标的当前位置，计算与有效槽位的距离，并选择最近的槽位进行放置或交换操作。
+    /// 支持堆叠相同物品、部分堆叠以及完全交换逻辑。
     /// </summary>
-    /// <param name="item">停止拖动的物品</param>
+    /// <param name="item">停止拖动的物品对象，该物品必须是当前正在被拖拽的对象。</param>
     public void Drop(InventoryItem item)
     {
-        float minDistance = 1000;
+        float minDistance = float.MaxValue;
         InventorySlot targetSlot = null;
-        foreach (InventorySlot slot in slots)
+        
+        // 获取鼠标在屏幕上的位置用于后续距离判断
+        Vector2 mouseScreenPos = Input.mousePosition;
+        Camera eventCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        
+        // 只在可接受放置的槽位（如背包和快捷栏）中查找目标槽位，排除输出槽等特殊槽位
+        InventorySlot[] validSlots = GetValidDropSlots();
+        
+        foreach (InventorySlot slot in validSlots)
         {
-            if (Vector2.Distance(item.transform.position, slot.transform.position) >= minDistance)
+            if (slot == null) continue;
+            
+            // 将槽位的世界坐标转换为屏幕坐标以与鼠标位置比较
+            Vector2 slotScreenPos = RectTransformUtility.WorldToScreenPoint(eventCamera, slot.transform.position);
+            float distance = Vector2.Distance(mouseScreenPos, slotScreenPos);
+            
+            // 找到距离鼠标最近的有效槽位
+            if (distance < minDistance)
             {
-                continue;
+                minDistance = distance;
+                targetSlot = slot;
             }
-
-            minDistance = Vector2.Distance(item.transform.position, slot.transform.position);
-            targetSlot = slot;
         }
 
-        if (targetSlot.item)
+        // 没有找到合适的槽位则直接返回，不执行任何操作
+        if (targetSlot == null)
         {
+            return;
+        }
+
+        // 判断目标槽位是否已有物品
+        if (targetSlot.item != null)
+        {
+            // 如果是同种物品且总数量不超过最大堆叠数，则合并堆叠
             if (item.itemName == targetSlot.item.itemName && targetSlot.item.amount + item.amount <= 64)
             {
                 targetSlot.item.IncreaseAmount(item.amount);
@@ -859,14 +1272,17 @@ public class Inventory : MonoBehaviour
                     draggedItem = null;
                 }
             }
+            // 若不能全部堆叠但还有空间，则只增加一部分数量
             else if (item.itemName == targetSlot.item.itemName && targetSlot.item.amount < 64)
             {
                 int spaceLeft = 64 - targetSlot.item.amount;
                 targetSlot.item.IncreaseAmount(spaceLeft);
                 item.IncreaseAmount(-spaceLeft);
             }
+            // 否则尝试交换两个物品的位置
             else
             {
+                // 交换物品：更新各自所属槽位信息及UI位置
                 InventoryItem targetItem = targetSlot.item;
                 InventorySlot originalSlot = item.lastSlot;
 
@@ -880,10 +1296,12 @@ public class Inventory : MonoBehaviour
                 draggedItem = targetItem;
             }
         }
+        // 目标槽位为空时，直接放入物品
         else
         {
             item.transform.position = targetSlot.transform.position;
             item.slot = targetSlot;
+            item.lastSlot = targetSlot;
             targetSlot.item = item;
 
             if (draggedItem == item)
@@ -891,6 +1309,53 @@ public class Inventory : MonoBehaviour
                 draggedItem = null;
             }
         }
+    }
+    
+    /// <summary>
+    /// 获取有效的放置槽位（排除合成槽和输出槽）
+    /// </summary>
+    /// <returns>包含所有有效放置槽位的数组，包括背包槽、快捷栏槽和合成槽</returns>
+    private InventorySlot[] GetValidDropSlots()
+    {
+        // 计算所有有效槽位的总数量
+        int totalCount = 0;
+        if (baggageSlots != null) totalCount += baggageSlots.Length;
+        if (hotbarSlots != null) totalCount += hotbarSlots.Length;
+        // 也包括合成槽（可以放入材料）
+        if (craftingSlots != null) totalCount += craftingSlots. Length;
+    
+        // 创建包含所有有效槽位的数组
+        InventorySlot[] validSlots = new InventorySlot[totalCount];
+        int index = 0;
+    
+        // 添加背包槽位
+        if (baggageSlots != null)
+        {
+            foreach (var slot in baggageSlots)
+            {
+                validSlots[index++] = slot;
+            }
+        }
+    
+        // 添加快捷栏槽位
+        if (hotbarSlots != null)
+        {
+            foreach (var slot in hotbarSlots)
+            {
+                validSlots[index++] = slot;
+            }
+        }
+    
+        // 添加合成槽位
+        if (craftingSlots != null)
+        {
+            foreach (var slot in craftingSlots)
+            {
+                validSlots[index++] = slot;
+            }
+        }
+    
+        return validSlots;
     }
 
     /// <summary>
@@ -957,8 +1422,13 @@ public class Inventory : MonoBehaviour
             return;
         }
 
-        GameObject remainItemObj = Instantiate(item.gameObject, parent: item.transform.parent);
+        GameObject remainItemObj = Instantiate(item.gameObject, parent: item. transform.parent);
         InventoryItem remainItem = remainItemObj.GetComponent<InventoryItem>();
+
+        // 确保 scriptableItem 被正确复制
+        remainItem.scriptableItem = item. scriptableItem;
+        remainItem.itemName = item.itemName;
+        remainItem.icon = item.icon;
 
         if (item.amountText != null && remainItem.amountText != null &&
             item.amountText.GetInstanceID() == remainItem.amountText.GetInstanceID())
@@ -1095,6 +1565,7 @@ public class Inventory : MonoBehaviour
 
             inventoryItem.transform.position = slot.transform.position;
             inventoryItem.itemName = item.name;
+            inventoryItem.scriptableItem = item;
             inventoryItem.SetSprite(item.sprite);
             inventoryItem.SetAmount(1);
 
