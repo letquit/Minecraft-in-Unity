@@ -15,6 +15,7 @@ MonoBehaviour:
   name: Workbench
   sprite: {fileID: 21300000, guid: c47968fe449d6114ca54d61539d33746, type: 3}
   model: {fileID: 1145134385985263541, guid: 0ff36c0c716399f4d8a5c1281cf4bb2c, type: 3}
+  block: {fileID: -652303142910714786, guid: 0ff36c0c716399f4d8a5c1281cf4bb2c, type: 3}
   recipe:
     topLeft: {fileID: 11400000, guid: 80402dca32028bc4c95b37324c46acc6, type: 2}
     topCenter: {fileID: 11400000, guid: 80402dca32028bc4c95b37324c46acc6, type: 2}
@@ -25,3 +26,4 @@ MonoBehaviour:
     bottomLeft: {fileID: 0}
     bottomCenter: {fileID: 0}
     bottomRight: {fileID: 0}
+  craftAmount: 1

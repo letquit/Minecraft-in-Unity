@@ -21,6 +21,13 @@ public class Item : ScriptableObject
     /// 物品模型对象，用于场景中的3D显示
     /// </summary>
     public GameObject model;
+    
+    /// <summary>
+    /// 物品对应的可放置方块（如果是方块类物品）
+    /// </summary>
+    [Header("Block")]
+    [Tooltip("物品对应的可放置方块预制体")]
+    public Block block;
 
     /// <summary>
     /// 合成配方信息

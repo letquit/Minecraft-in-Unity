@@ -15,6 +15,7 @@ MonoBehaviour:
   name: GrassBlock
   sprite: {fileID: 21300000, guid: d715b1edd577c1c48bd00d24cf568cef, type: 3}
   model: {fileID: 4212946347838386741, guid: 972cb0c510b088e42b0176324ba6071a, type: 3}
+  block: {fileID: -8792287235714754041, guid: 972cb0c510b088e42b0176324ba6071a, type: 3}
   recipe:
     topLeft: {fileID: 0}
     topCenter: {fileID: 0}
@@ -25,3 +26,4 @@ MonoBehaviour:
     bottomLeft: {fileID: 0}
     bottomCenter: {fileID: 0}
     bottomRight: {fileID: 0}
+  craftAmount: 1

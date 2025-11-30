@@ -49,7 +49,12 @@ public class Player : Entity
     [Header("Block Container")] [Tooltip("存放放置方块的容器名称")]
     public string blockContainerName = "Blocks";
 
-    [Header("UI")] [Tooltip("所有UI界面")] public UI[] uis;
+    [Header("UI")] 
+    [Tooltip("所有UI界面")] 
+    public UI[] uis;
+
+    [Tooltip("HUD快捷栏引用")]
+    public HUD hud;
 
     private Transform blockContainer;
 
@@ -424,7 +429,8 @@ public class Player : Entity
     /// </summary>
     private void TryPlaceBlock()
     {
-        if (!targetBlock) return;
+        // 如果没有目标方块，直接返回
+        if (! targetBlock) return;
 
         // 检查是否点击了工作台方块
         CraftingTableBlock craftingTableBlock = targetBlock.GetComponent<CraftingTableBlock>();
@@ -434,7 +440,20 @@ public class Player : Entity
             return;
         }
 
-        // 计算新方块位置
+        // 检查是否有选中的物品可以放置
+        if (hud != null && ! hud.HasSelectedItem())
+        {
+            // 快捷栏没有选中物品，不能放置
+            return;
+        }
+    
+        // 检查当前激活的方块是否有效
+        if (activeBlock == null)
+        {
+            return;
+        }
+
+        // 根据射线碰撞法线计算新方块应放置的位置
         Vector3 hitNormal = targetRaycastHit.normal;
         Vector3 placeDirection = new Vector3(
             Mathf.Round(hitNormal.x),
@@ -443,21 +462,27 @@ public class Player : Entity
         );
         Vector3 newBlockPosition = targetBlock.transform.position + placeDirection;
 
-        // 检查距离
+        // 检查玩家与目标位置之间的距离是否超出范围
         if (Vector3.Distance(transform.position, newBlockPosition) > range) return;
 
-        // 检查碰撞
-        if (!CanPlaceBlockAt(newBlockPosition)) return;
+        // 检查该位置是否允许放置方块（如无遮挡、无其他方块等）
+        if (! CanPlaceBlockAt(newBlockPosition)) return;
 
-        // 确保容器存在
+        // 确保用于存放方块的游戏对象容器已初始化
         if (blockContainer == null)
         {
             InitBlockContainer();
         }
 
-        // 在容器下创建方块
+        // 实例化新的方块并设置其世界坐标
         GameObject block = Instantiate(activeBlock.gameObject, blockContainer);
         block.transform.position = newBlockPosition;
+    
+        // 放置成功后减少快捷栏中对应物品的数量
+        if (hud != null)
+        {
+            hud.DecreaseSelectedItem(1);
+        }
     }
 
     /// <summary>

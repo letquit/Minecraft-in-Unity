@@ -15,3 +15,15 @@ MonoBehaviour:
   name: Cobblestone
   sprite: {fileID: 21300000, guid: 0e592062ce2f9d942965004bcbd1fdd8, type: 3}
   model: {fileID: 1354760557248488483, guid: 327ab62bde86db2488a954f394f4f26e, type: 3}
+  block: {fileID: 8657918603264151572, guid: 327ab62bde86db2488a954f394f4f26e, type: 3}
+  recipe:
+    topLeft: {fileID: 0}
+    topCenter: {fileID: 0}
+    topRight: {fileID: 0}
+    middleLeft: {fileID: 0}
+    middleCenter: {fileID: 0}
+    middleRight: {fileID: 0}
+    bottomLeft: {fileID: 0}
+    bottomCenter: {fileID: 0}
+    bottomRight: {fileID: 0}
+  craftAmount: 1
