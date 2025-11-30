@@ -25,3 +25,4 @@ MonoBehaviour:
     bottomLeft: {fileID: 0}
     bottomCenter: {fileID: 0}
     bottomRight: {fileID: 0}
+  craftAmount: 4

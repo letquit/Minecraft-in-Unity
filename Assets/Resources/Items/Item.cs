@@ -26,6 +26,14 @@ public class Item : ScriptableObject
     /// 合成配方信息
     /// </summary>
     [Header("Recipe")] public Recipe recipe;
+    
+    /// <summary>
+    /// 合成产出数量（默认为1）
+    /// 例如：1个OakLog合成4个OakPlanks，则OakPlanks的craftAmount设为4
+    /// </summary>
+    [Tooltip("合成产出数量")]
+    [Min(1)]
+    public int craftAmount = 1;
 }
 
 /// <summary>
