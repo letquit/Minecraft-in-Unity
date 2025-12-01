@@ -6,6 +6,8 @@ TagManager:
   tags:
   - CraftingTable
   - Workbench
+  - Block
+  - Enemy
   layers:
   - Default
   - TransparentFX

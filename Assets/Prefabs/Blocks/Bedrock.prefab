@@ -15,7 +15,7 @@ GameObject:
   - component: {fileID: 5845822550202758248}
   m_Layer: 6
   m_Name: Bedrock
-  m_TagString: Untagged
+  m_TagString: Block
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 2147483647
@@ -123,3 +123,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   durabilitySeconds: 999
   breakingParticlesPrefab: {fileID: 4767093748573092825, guid: 2db57e3c208d7874483b3ba64f0351c3, type: 3}
+  dropPrefab: {fileID: 0}
+  dropItem: {fileID: 0}
